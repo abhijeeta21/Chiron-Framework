@@ -7,9 +7,12 @@ class AST(object):
 
 
 # --Instruction Classes-----------------------------------------------
-
 class Instruction(AST):
-    pass
+    def __init__(self):
+        self.line_number = -1
+
+# class Instruction(AST):
+#     pass
 
 
 class AssignmentCommand(Instruction):

@@ -37,20 +37,31 @@ class astGenPass(tlangVisitor):
 
         return instrList
 
-
     def visitAssignment(self, ctx:tlangParser.AssignmentContext):
         lval = ChironAST.Var(ctx.VAR().getText())
         rval = self.visit(ctx.expression())
-        return [(ChironAST.AssignmentCommand(lval, rval), 1)]
+        instr = ChironAST.AssignmentCommand(lval, rval)
+        instr.line_number = ctx.start.line
+        return [(instr, 1)]
+
+    # def visitAssignment(self, ctx:tlangParser.AssignmentContext):
+    #     lval = ChironAST.Var(ctx.VAR().getText())
+    #     rval = self.visit(ctx.expression())
+    #     return [(ChironAST.AssignmentCommand(lval, rval), 1)]
 
 
     def visitIfConditional(self, ctx:tlangParser.IfConditionalContext):
         condObj = ChironAST.ConditionCommand(self.visit(ctx.condition()))
+        condObj.line_number = ctx.start.line # <-- CRITICAL
         thenInstrList = self.visit(ctx.strict_ilist())
         return [(condObj, len(thenInstrList) + 1)] + thenInstrList
+        # condObj = ChironAST.ConditionCommand(self.visit(ctx.condition()))
+        # thenInstrList = self.visit(ctx.strict_ilist())
+        # return [(condObj, len(thenInstrList) + 1)] + thenInstrList
 
     def visitIfElseConditional(self, ctx:tlangParser.IfElseConditionalContext):
         condObj = ChironAST.ConditionCommand(self.visit(ctx.condition()))
+        condObj.line_number = ctx.start.line
         thenInstrList = self.visit(ctx.strict_ilist(0))
         elseInstrList = self.visit(ctx.strict_ilist(1))
         jumpOverElseBlock = [(ChironAST.ConditionCommand(ChironAST.BoolFalse()), len(elseInstrList) + 1)]
@@ -59,7 +70,14 @@ class astGenPass(tlangVisitor):
     def visitGotoCommand(self, ctx:tlangParser.GotoCommandContext):
         xcor = self.visit(ctx.expression(0))
         ycor = self.visit(ctx.expression(1))
-        return [(ChironAST.GotoCommand(xcor, ycor), 1)]
+        instr = ChironAST.GotoCommand(xcor, ycor)
+        instr.line_number = ctx.start.line
+        return [(instr, 1)]
+
+    # def visitGotoCommand(self, ctx:tlangParser.GotoCommandContext):
+    #     xcor = self.visit(ctx.expression(0))
+    #     ycor = self.visit(ctx.expression(1))
+    #     return [(ChironAST.GotoCommand(xcor, ycor), 1)]
 
     # Visit a parse tree produced by tlangParser#unaryExpr.
     def visitUnaryExpr(self, ctx:tlangParser.UnaryExprContext):
@@ -154,6 +172,8 @@ class astGenPass(tlangVisitor):
         constZero = ChironAST.Num(0)
         constOne = ChironAST.Num(1)
         loopCond = ChironAST.ConditionCommand(ChironAST.GT(counterVar, constZero))
+        loopCond.line_number = ctx.start.line # Assign line number to the loop condition
+        # loopCond = ChironAST.ConditionCommand(ChironAST.GT(counterVar, constZero))
         counterVarDecrInstr = ChironAST.AssignmentCommand(counterVar, ChironAST.Diff(counterVar, constOne))
 
         thenInstrList = []
@@ -168,7 +188,20 @@ class astGenPass(tlangVisitor):
     def visitMoveCommand(self, ctx:tlangParser.MoveCommandContext):
         mvcommand = ctx.moveOp().getText()
         mvexpr = self.visit(ctx.expression())
-        return [(ChironAST.MoveCommand(mvcommand, mvexpr), 1)]
+        instr = ChironAST.MoveCommand(mvcommand, mvexpr)
+        instr.line_number = ctx.start.line
+        return [(instr, 1)]
+
+    # def visitMoveCommand(self, ctx:tlangParser.MoveCommandContext):
+    #     mvcommand = ctx.moveOp().getText()
+    #     mvexpr = self.visit(ctx.expression())
+    #     return [(ChironAST.MoveCommand(mvcommand, mvexpr), 1)]
+
 
     def visitPenCommand(self, ctx:tlangParser.PenCommandContext):
-        return [(ChironAST.PenCommand(ctx.getText()), 1)]
+        instr = ChironAST.PenCommand(ctx.getText())
+        instr.line_number = ctx.start.line
+        return [(instr, 1)]
+    
+    # def visitPenCommand(self, ctx:tlangParser.PenCommandContext):
+    #     return [(ChironAST.PenCommand(ctx.getText()), 1)]

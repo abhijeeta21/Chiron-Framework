@@ -26,6 +26,8 @@ import submissionAI as AISub
 from sbflSubmission import computeRanks
 import csv
 
+from slicing import ChironPDG, compute_backward_slice, dump_slice_pdg, get_def_use
+
 
 def cleanup():
     pass
@@ -54,6 +56,13 @@ if __name__ == "__main__":
     )
 
     # add arguments for parsing command-line arguments
+
+    cmdparser.add_argument(
+        "-sl", "--slice",
+        help="Run backward static slicing. Format: 'line_number,variable_name' (e.g., '10,:x')",
+        type=str,
+    )
+
     cmdparser.add_argument(
         "-p",
         "--ir",
@@ -227,6 +236,55 @@ if __name__ == "__main__":
     if args.dump_cfg:
         cfgB.dumpCFG(cfg, "control_flow_graph")
         # set the cfg of the program.
+
+    if args.slice:
+        if not args.control_flow:
+            print("[Error] Slicing requires a CFG. Please append the '-cfg_gen' flag.")
+            sys.exit(1)
+            
+        print("\n========== Chiron-Slice ==========\n")
+        try:
+            line_str, var_name = args.slice.split(',')
+            target_line = int(line_str.strip())
+            target_var = var_name.strip()
+            
+            # Sanitize Chiron variable format
+            if not target_var.startswith(':'):
+                target_var = f":{target_var}"
+            
+            target_ir_idx = -1
+            # Search IR backward to find the last usage/def on that line
+            for idx in range(len(irHandler.ir) - 1, -1, -1):
+                instr = irHandler.ir[idx][0]
+                if hasattr(instr, 'line_number') and instr.line_number == target_line:
+                    defs, uses = get_def_use(instr)
+                    if target_var in defs or target_var in uses:
+                        target_ir_idx = idx
+                        break
+            
+            if target_ir_idx == -1:
+                print(f"[Error] Could not find def/use of '{target_var}' at line {target_line}.")
+            else:
+                pdg = ChironPDG(irHandler)
+                slice_result = compute_backward_slice(pdg, target_ir_idx)
+                
+                print(f"Backward Slice Criteria: Line {target_line}, Variable '{target_var}'")
+                print("Sliced Program Instructions:")
+                
+                clean_slice = []
+                for idx in slice_result:
+                    instr = irHandler.ir[idx][0]
+                    if "__rep_counter_" not in str(instr):
+                        clean_slice.append(idx)
+                        line_no = getattr(instr, 'line_number', '?')
+                        print(f"  [Line {line_no}] L{idx}: {instr}")
+                
+                filename = f"slice_L{target_line}_{target_var.replace(':', '')}"
+                dump_slice_pdg(pdg, clean_slice, irHandler, filename=filename)
+                print(f"\n[+] Slice visualization generated: {filename}.png")
+                
+        except ValueError:
+            print("[Error] Invalid slice format. Use: -sl 'line_number,variable_name'")
 
     if args.ir:
         irHandler.pretty_print(irHandler.ir)
