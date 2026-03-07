@@ -26,7 +26,7 @@ import submissionAI as AISub
 from sbflSubmission import computeRanks
 import csv
 
-from slicing import ChironPDG, compute_backward_slice, dump_slice_pdg, get_def_use
+from slicing import ChironPDG, compute_backward_slice, dump_slice_pdg, get_def_use, get_closest_ir_from_coordinate
 
 
 def cleanup():
@@ -60,6 +60,12 @@ if __name__ == "__main__":
     cmdparser.add_argument(
         "-sl", "--slice",
         help="Run backward static slicing. Format: 'line_number,variable_name' (e.g., '10,:x')",
+        type=str,
+    )
+
+    cmdparser.add_argument(
+        "-vsl", "--visual_slice",
+        help="Run Visual Backward Slicing. Format: 'x,y' (e.g., '100,50')",
         type=str,
     )
 
@@ -286,6 +292,66 @@ if __name__ == "__main__":
         except ValueError:
             print("[Error] Invalid slice format. Use: -sl 'line_number,variable_name'")
 
+
+    if args.visual_slice:
+        if not args.control_flow:
+            print("[Error] Slicing requires a CFG. Please append the '-cfg_gen' flag.")
+            sys.exit(1)
+            
+        print("\n========== Chiron Visual Slicer ==========\n")
+        try:
+            x_str, y_str = args.visual_slice.split(',')
+            target_x = float(x_str.strip())
+            target_y = float(y_str.strip())
+            
+            print(f"[+] Executing program to map spatial coordinates...")
+            
+            # 1. Run the Interpreter automatically to generate the map
+            inptr = ConcreteInterpreter(irHandler, args)
+            inptr.trtl.speed(0) # Set turtle to instant drawing speed
+            inptr.initProgramContext(args.params)
+            
+            terminated = False
+            while not terminated:
+                terminated = inptr.interpret()
+                
+            drawing_map = inptr.drawing_map
+            if not drawing_map:
+                print("[Error] The turtle did not draw any lines.")
+                sys.exit(1)
+                
+            # 2. Find the closest IR index
+            target_ir_idx = get_closest_ir_from_coordinate(target_x, target_y, drawing_map)
+            
+            if target_ir_idx == -1:
+                print("[Error] Could not find a matching drawn line.")
+            else:
+                target_instr = irHandler.ir[target_ir_idx][0]
+                target_line = getattr(target_instr, 'line_number', '?')
+                
+                print(f"\n[!] Target Acquired: Coordinate ({target_x}, {target_y})")
+                print(f"[!] Closest segment was drawn by L{target_ir_idx} (Line {target_line}): {target_instr}\n")
+                
+                # 3. Generate the Slice
+                pdg = ChironPDG(irHandler)
+                slice_result = compute_backward_slice(pdg, target_ir_idx)
+                
+                print("Sliced Program Instructions:")
+                clean_slice = []
+                for idx in slice_result:
+                    instr = irHandler.ir[idx][0]
+                    if "__rep_counter_" not in str(instr):
+                        clean_slice.append(idx)
+                        line_no = getattr(instr, 'line_number', '?')
+                        print(f"  [Line {line_no}] L{idx}: {instr}")
+                
+                filename = f"vslice_X{int(target_x)}_Y{int(target_y)}"
+                dump_slice_pdg(pdg, clean_slice, irHandler, filename=filename)
+                print(f"\n[+] Visual slice graph generated: {filename}.png")
+                
+        except ValueError:
+            print("[Error] Invalid visual slice format. Use: -vsl 'x,y'")
+
     if args.ir:
         irHandler.pretty_print(irHandler.ir)
 
@@ -347,6 +413,15 @@ if __name__ == "__main__":
                 break
         print("Program Ended.")
         print()
+
+        # --- NEW CODE: Click Listener ---
+        def print_coords(x, y):
+            print(f"[+] You clicked at coordinate: {x}, {y}")
+            print(f"    Run slicer: uv run chiron.py -cfg_gen -vsl \"{x},{y}\" {args.progfl}")
+            
+        turtle.onscreenclick(print_coords)
+        # --------------------------------
+
         print("Press ESCAPE to exit")
         turtle.listen()
         turtle.onkeypress(stopTurtle, "Escape")

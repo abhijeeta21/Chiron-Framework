@@ -88,6 +88,9 @@ class ConcreteInterpreter(Interpreter):
             self.chironhook = Chironhooks.ConcreteChironHooks()
         self.pc = 0
 
+        # --- NEW: Spatial Mapping Array ---
+        self.drawing_map = []
+
     def interpret(self):
         print("Program counter : ", self.pc)
         stmt, tgt = self.ir[self.pc]
@@ -146,7 +149,21 @@ class ConcreteInterpreter(Interpreter):
 
     def handleMove(self, stmt, tgt):
         print("  MoveCommand")
+        # --- NEW: Capture Pre-State ---
+        start_pos = self.trtl.pos()
+        is_down = self.trtl.isdown()
+
         exec("self.trtl.%s(%s)" % (stmt.direction,addContext(stmt.expr)))
+
+        # --- NEW: Capture Post-State & Map ---
+        end_pos = self.trtl.pos()
+        if is_down and start_pos != end_pos:
+            self.drawing_map.append({
+                "ir_idx": self.pc, 
+                "start": start_pos, 
+                "end": end_pos
+            })
+
         return 1
 
     def handleNoOpCommand(self, stmt, tgt):
@@ -160,7 +177,22 @@ class ConcreteInterpreter(Interpreter):
 
     def handleGotoCommand(self, stmt, tgt):
         print(" GotoCommand")
+
+        # --- NEW: Capture Pre-State ---
+        start_pos = self.trtl.pos()
+        is_down = self.trtl.isdown()
+
         xcor = addContext(stmt.xcor)
         ycor = addContext(stmt.ycor)
         exec("self.trtl.goto(%s, %s)" % (xcor, ycor))
+
+        # --- NEW: Capture Post-State & Map ---
+        end_pos = self.trtl.pos()
+        if is_down and start_pos != end_pos:
+            self.drawing_map.append({
+                "ir_idx": self.pc, 
+                "start": start_pos, 
+                "end": end_pos
+            })
+            
         return 1

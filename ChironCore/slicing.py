@@ -4,6 +4,8 @@ from networkx.drawing.nx_agraph import to_agraph
 from lattice import Lattice, TransferFunction
 import ChironAST.ChironAST as ChironAST
 
+import math 
+
 # ==========================================
 # Phase 2: Def-Use Extraction Helper
 # ==========================================
@@ -249,3 +251,48 @@ def dump_slice_pdg(pdg_wrapper, slice_indices, irHandler, filename="slice_output
     A = to_agraph(G)
     A.layout('dot')
     A.draw(filename + ".png")
+
+
+# ==========================================
+# Phase 8: Visual Slicing Geometry Engine
+# ==========================================
+
+def point_to_line_dist(px, py, x1, y1, x2, y2):
+    """Calculates the shortest distance from a point to a finite line segment."""
+    line_mag = math.hypot(x2 - x1, y2 - y1)
+    if line_mag == 0:
+        return math.hypot(px - x1, py - y1)
+
+    # Calculate the dot product to find the projection of the point onto the line
+    u = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / (line_mag ** 2)
+    
+    # If the projection is outside the segment, calculate distance to the closest endpoint
+    if u < 0.0:
+        return math.hypot(px - x1, py - y1)
+    elif u > 1.0:
+        return math.hypot(px - x2, py - y2)
+    else:
+        # Calculate distance to the projection point on the segment
+        ix = x1 + u * (x2 - x1)
+        iy = y1 + u * (y2 - y1)
+        return math.hypot(px - ix, py - iy)
+
+def get_closest_ir_from_coordinate(target_x, target_y, drawing_map):
+    """Finds the IR index that drew the line segment closest to the target coordinates."""
+    if not drawing_map:
+        return -1
+    
+    min_dist = float('inf')
+    closest_ir = -1
+    
+    for segment in drawing_map:
+        x1, y1 = segment['start']
+        x2, y2 = segment['end']
+        
+        dist = point_to_line_dist(target_x, target_y, x1, y1, x2, y2)
+        
+        if dist < min_dist:
+            min_dist = dist
+            closest_ir = segment['ir_idx']
+            
+    return closest_ir
